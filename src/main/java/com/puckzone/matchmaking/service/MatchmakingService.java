@@ -1,5 +1,6 @@
 package com.puckzone.matchmaking.service;
 
+import com.puckzone.matchmaking.client.GameClient;
 import com.puckzone.matchmaking.config.MatchmakingProperties;
 import com.puckzone.matchmaking.model.Match;
 import com.puckzone.matchmaking.model.OpponentType;
@@ -31,16 +32,19 @@ public class MatchmakingService {
     private final MatchmakingQueue queue;
     private final RatingProvider ratingProvider;
     private final MatchmakingProperties properties;
+    private final GameClient gameClient;
 
     /** Salas ya creadas, pendientes de que el jugador las recoja por polling. */
     private final Map<Long, Match> matchesByUser = new ConcurrentHashMap<>();
 
     public MatchmakingService(MatchmakingQueue queue,
                               RatingProvider ratingProvider,
-                              MatchmakingProperties properties) {
+                              MatchmakingProperties properties,
+                              GameClient gameClient) {
         this.queue = queue;
         this.ratingProvider = ratingProvider;
         this.properties = properties;
+        this.gameClient = gameClient;
     }
 
     /**
@@ -167,6 +171,7 @@ public class MatchmakingService {
     private void createMatch(QueueEntry player1, QueueEntry player2) {
         OpponentType type = player2 == null ? OpponentType.BOT : OpponentType.HUMAN;
         Match match = new Match(UUID.randomUUID().toString(), player1, player2, type, Instant.now());
+        gameClient.notifyMatchCreated(match);
         matchesByUser.put(player1.userId(), match);
         if (player2 != null) {
             matchesByUser.put(player2.userId(), match);
