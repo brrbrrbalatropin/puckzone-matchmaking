@@ -48,15 +48,15 @@ public class MatchmakingService {
     }
 
     /**
-     * Mete al jugador en la cola de espera.
+     * Mete al jugador en la cola de espera. Si tenía una sala pendiente sin
+     * recoger, se descarta: encolarse de nuevo expresa querer partida nueva.
      *
      * @return la entrada creada
-     * @throws IllegalStateException si ya está en cola o ya tiene una sala
-     *                               pendiente de recoger
+     * @throws IllegalStateException si ya está en la cola
      */
     public QueueEntry enqueue(Long userId, String username, String university) {
-        if (matchesByUser.containsKey(userId)) {
-            throw new IllegalStateException("El jugador ya tiene una sala asignada");
+        if (matchesByUser.remove(userId) != null) {
+            log.info("Jugador {} se re-encoló; se descarta su sala anterior", userId);
         }
         QueueEntry entry = new QueueEntry(userId, username, university, Instant.now());
         if (!queue.add(entry)) {
@@ -77,9 +77,9 @@ public class MatchmakingService {
         return removed;
     }
 
-    /** ¿El jugador sigue esperando rival? */
-    public boolean isWaiting(Long userId) {
-        return queue.contains(userId);
+    /** La entrada del jugador si sigue esperando rival (para calcular su espera). */
+    public Optional<QueueEntry> waitingEntry(Long userId) {
+        return queue.get(userId);
     }
 
     /**
