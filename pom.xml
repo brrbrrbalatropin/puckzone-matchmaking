@@ -35,6 +35,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
+        <!-- Health probes para Azure Container Apps -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         <!-- RestClient para llamadas HTTP salientes (matchmaking -> game) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -16,7 +16,6 @@ public class WebConfig implements WebMvcConfigurer {
     @Bean
     public FilterRegistrationBean<JwtAuthFilter> jwtAuthFilter(JwtProperties properties) {
         var registration = new FilterRegistrationBean<>(new JwtAuthFilter(properties));
-        // Solo protege la cola; actuator y demás quedan por fuera.
         registration.addUrlPatterns("/queue", "/queue/*");
         return registration;
     }

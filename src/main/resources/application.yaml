@@ -1,3 +1,32 @@
+server:
+  port: 8082
+
 spring:
   application:
     name: puckzone-matchmaking
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+puckzone:
+  jwt:
+    secret: ${PUCKZONE_JWT_SECRET:puckzone-dev-secret-change-me-please-32bytes-min!!}
+
+  matchmaking:
+    window-base: 50
+    window-growth-per-second: 25
+    bot-timeout: 10s
+    match-retention: 60s
+    tick: 1s
+
+  game:
+    base-url: ${GAME_BASE_URL:http://localhost:8083}
+    connect-timeout: 2s
+    read-timeout: 3s

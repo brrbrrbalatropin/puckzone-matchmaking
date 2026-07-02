@@ -1,0 +1,10 @@
+# Mantiene el contexto de build pequeno: estos archivos no se envian al daemon.
+target/
+.git/
+.idea/
+*.iml
+.vscode/
+docker-compose*.yml
+run-local.ps1
+HELP.md
+README.md
