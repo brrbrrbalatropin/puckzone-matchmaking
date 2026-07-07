@@ -18,5 +18,5 @@ public interface RatingProvider {
      * @param userId identificador del jugador (subject del JWT)
      * @return rating del jugador; nunca negativo
      */
-    int ratingFor(Long userId);
+    int ratingFor(String userId);
 }

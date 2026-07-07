@@ -57,7 +57,7 @@ public class GameClient {
     record CreateGameRequest(String matchId, PlayerPayload player1, PlayerPayload player2, String opponentType) {
     }
 
-    record PlayerPayload(Long userId, String username, String university) {
+    record PlayerPayload(String userId, String username, String university) {
 
         static PlayerPayload from(QueueEntry entry) {
             return entry == null ? null

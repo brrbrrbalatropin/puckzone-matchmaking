@@ -35,7 +35,7 @@ public class MatchmakingService {
     private final GameClient gameClient;
 
     /** Salas ya creadas, pendientes de que el jugador las recoja por polling. */
-    private final Map<Long, Match> matchesByUser = new ConcurrentHashMap<>();
+    private final Map<String, Match> matchesByUser = new ConcurrentHashMap<>();
 
     public MatchmakingService(MatchmakingQueue queue,
                               RatingProvider ratingProvider,
@@ -54,7 +54,7 @@ public class MatchmakingService {
      * @return la entrada creada
      * @throws IllegalStateException si ya está en la cola
      */
-    public QueueEntry enqueue(Long userId, String username, String university) {
+    public QueueEntry enqueue(String userId, String username, String university) {
         if (matchesByUser.remove(userId) != null) {
             log.info("Jugador {} se re-encoló; se descarta su sala anterior", userId);
         }
@@ -71,14 +71,14 @@ public class MatchmakingService {
      *
      * @return la entrada eliminada, o vacío si no estaba en cola
      */
-    public Optional<QueueEntry> dequeue(Long userId) {
+    public Optional<QueueEntry> dequeue(String userId) {
         Optional<QueueEntry> removed = queue.remove(userId);
         removed.ifPresent(e -> log.info("Jugador {} salió de la cola", userId));
         return removed;
     }
 
     /** La entrada del jugador si sigue esperando rival (para calcular su espera). */
-    public Optional<QueueEntry> waitingEntry(Long userId) {
+    public Optional<QueueEntry> waitingEntry(String userId) {
         return queue.get(userId);
     }
 
@@ -86,7 +86,7 @@ public class MatchmakingService {
      * Sala asignada al jugador, si el matchmaking ya lo emparejó. Es lo que
      * consulta el polling del cliente cada 1-2 segundos.
      */
-    public Optional<Match> matchFor(Long userId) {
+    public Optional<Match> matchFor(String userId) {
         return Optional.ofNullable(matchesByUser.get(userId));
     }
 
@@ -108,7 +108,7 @@ public class MatchmakingService {
             return;
         }
 
-        Map<Long, Integer> ratings = new ConcurrentHashMap<>();
+        Map<String, Integer> ratings = new ConcurrentHashMap<>();
         waiting.forEach(e -> ratings.put(e.userId(), ratingProvider.ratingFor(e.userId())));
 
         // Todos los pares compatibles, ordenados por cercanía de rating y,
@@ -133,7 +133,7 @@ public class MatchmakingService {
         candidates.sort(Comparator.comparingInt(Candidate::ratingDiff)
                 .thenComparing(Candidate::oldest));
 
-        Set<Long> matched = new HashSet<>();
+        Set<String> matched = new HashSet<>();
         for (Candidate c : candidates) {
             if (matched.contains(c.a().userId()) || matched.contains(c.b().userId())) {
                 continue;

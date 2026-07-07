@@ -13,7 +13,7 @@ import java.time.Instant;
  * emitido por puckzone-auth.
  */
 public record QueueEntry(
-        Long userId,
+        String userId,
         String username,
         String university,
         Instant enqueuedAt

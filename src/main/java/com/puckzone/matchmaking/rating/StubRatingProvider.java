@@ -22,7 +22,7 @@ public class StubRatingProvider implements RatingProvider {
     public static final int DEFAULT_RATING = 1000;
 
     @Override
-    public int ratingFor(Long userId) {
+    public int ratingFor(String userId) {
         return DEFAULT_RATING;
     }
 }

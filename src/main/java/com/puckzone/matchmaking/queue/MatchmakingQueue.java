@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class MatchmakingQueue {
 
-    private final Map<Long, QueueEntry> waiting = new ConcurrentHashMap<>();
+    private final Map<String, QueueEntry> waiting = new ConcurrentHashMap<>();
 
 
     public boolean add(QueueEntry entry) {
@@ -37,15 +37,15 @@ public class MatchmakingQueue {
     }
 
 
-    public Optional<QueueEntry> remove(Long userId) {
+    public Optional<QueueEntry> remove(String userId) {
         return Optional.ofNullable(waiting.remove(userId));
     }
 
-    public boolean contains(Long userId) {
+    public boolean contains(String userId) {
         return waiting.containsKey(userId);
     }
 
-    public Optional<QueueEntry> get(Long userId) {
+    public Optional<QueueEntry> get(String userId) {
         return Optional.ofNullable(waiting.get(userId));
     }
 

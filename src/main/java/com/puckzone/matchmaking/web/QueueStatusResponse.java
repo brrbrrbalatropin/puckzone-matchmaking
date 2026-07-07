@@ -30,7 +30,7 @@ public record QueueStatusResponse(
     }
 
     /** Arma la vista de la sala desde la perspectiva del jugador que consulta. */
-    public static QueueStatusResponse matched(Match match, Long requesterId) {
+    public static QueueStatusResponse matched(Match match, String requesterId) {
         QueueEntry opponent = requesterId.equals(match.player1().userId())
                 ? match.player2()
                 : match.player1();

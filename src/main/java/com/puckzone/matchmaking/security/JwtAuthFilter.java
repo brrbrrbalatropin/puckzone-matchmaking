@@ -43,7 +43,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     .parseSignedClaims(header.substring("Bearer ".length()))
                     .getPayload();
             AuthenticatedUser user = new AuthenticatedUser(
-                    Long.valueOf(claims.getSubject()),
+                    claims.getSubject(),
                     claims.get("username", String.class),
                     claims.get("email", String.class),
                     claims.get("university", String.class));
