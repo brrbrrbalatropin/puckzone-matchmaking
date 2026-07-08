@@ -92,13 +92,34 @@ public class MatchmakingService {
 
     /**
      * Un pase del algoritmo de emparejamiento. Corre cada segundo.
+     * Desde 2026-07-08 el bot NO se asigna automáticamente: al cumplirse el
+     * botTimeout el status ofrece la opción (botAvailable) y el jugador
+     * decide con POST /queue/bot, o sigue esperando rival humano.
      */
     @Scheduled(fixedRateString = "${puckzone.matchmaking.tick:1s}")
     public void tick() {
         Instant now = Instant.now();
         pairHumans(now);
-        assignBots(now);
         evictOldMatches(now);
+    }
+
+    /**
+     * El jugador aceptó jugar contra el bot: lo saca de la cola y crea la
+     * sala vs bot. Si un humano lo emparejó justo antes de aceptar, se
+     * devuelve esa sala (el clic tardío no rompe el match real).
+     *
+     * @throws IllegalStateException si no está en cola ni tiene sala
+     */
+    public Match requestBotMatch(String userId) {
+        Match existing = matchesByUser.get(userId);
+        if (existing != null) {
+            log.info("Jugador {} pidió bot pero ya tenía sala {}", userId, existing.id());
+            return existing;
+        }
+        QueueEntry entry = queue.remove(userId)
+                .orElseThrow(() -> new IllegalStateException("El jugador no está en la cola"));
+        createMatch(entry, null);
+        return matchesByUser.get(userId);
     }
 
     /** Fase 1: empareja humanos compatibles, los de rating más cercano primero. */
@@ -151,18 +172,7 @@ public class MatchmakingService {
         }
     }
 
-    /** Fase 2: quien agotó el timeout sin rival humano juega contra el bot. */
-    private void assignBots(Instant now) {
-        for (QueueEntry entry : queue.snapshot()) {
-            Duration waited = Duration.between(entry.enqueuedAt(), now);
-            if (waited.compareTo(properties.botTimeout()) >= 0
-                    && queue.remove(entry.userId()).isPresent()) {
-                createMatch(entry, null);
-            }
-        }
-    }
-
-    /** Fase 3: descarta salas que nadie recogió tras el periodo de retención. */
+    /** Fase 2: descarta salas que nadie recogió tras el periodo de retención. */
     private void evictOldMatches(Instant now) {
         Instant cutoff = now.minus(properties.matchRetention());
         matchesByUser.values().removeIf(m -> m.createdAt().isBefore(cutoff));

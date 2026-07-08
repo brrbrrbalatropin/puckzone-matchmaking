@@ -1,5 +1,7 @@
 package com.puckzone.matchmaking.web;
 
+import com.puckzone.matchmaking.config.MatchmakingProperties;
+import com.puckzone.matchmaking.model.Match;
 import com.puckzone.matchmaking.model.QueueEntry;
 import com.puckzone.matchmaking.security.AuthenticatedUser;
 import com.puckzone.matchmaking.service.MatchmakingService;
@@ -21,9 +23,11 @@ import java.util.Map;
 public class MatchmakingController {
 
     private final MatchmakingService service;
+    private final MatchmakingProperties properties;
 
-    public MatchmakingController(MatchmakingService service) {
+    public MatchmakingController(MatchmakingService service, MatchmakingProperties properties) {
         this.service = service;
+        this.properties = properties;
     }
 
     /** Entra a la cola. 409 si ya estaba esperando. */
@@ -31,10 +35,10 @@ public class MatchmakingController {
     public ResponseEntity<QueueStatusResponse> enqueue(AuthenticatedUser user) {
         service.enqueue(user.userId(), user.username(), user.university());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(QueueStatusResponse.waiting(0));
+                .body(QueueStatusResponse.waiting(0, false));
     }
 
-    /** Estado actual: MATCHED, WAITING o NOT_IN_QUEUE. */
+    /** Estado actual: MATCHED, WAITING (con botAvailable tras el timeout) o NOT_IN_QUEUE. */
     @GetMapping("/status")
     public QueueStatusResponse status(AuthenticatedUser user) {
         return service.matchFor(user.userId())
@@ -42,6 +46,17 @@ public class MatchmakingController {
                 .orElseGet(() -> service.waitingEntry(user.userId())
                         .map(this::waitingResponse)
                         .orElseGet(QueueStatusResponse::notInQueue));
+    }
+
+    /**
+     * El jugador aceptó la oferta de jugar contra el bot: sale de la cola y
+     * recibe su sala de una vez. 409 si ya no estaba en cola ni con sala.
+     */
+    @PostMapping("/bot")
+    public ResponseEntity<QueueStatusResponse> playBot(AuthenticatedUser user) {
+        Match match = service.requestBotMatch(user.userId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(QueueStatusResponse.matched(match, user.userId()));
     }
 
     /** Cancela la espera. Idempotente: 204 aunque ya no estuviera en cola. */
@@ -58,7 +73,8 @@ public class MatchmakingController {
     }
 
     private QueueStatusResponse waitingResponse(QueueEntry entry) {
-        long seconds = Duration.between(entry.enqueuedAt(), Instant.now()).toSeconds();
-        return QueueStatusResponse.waiting(seconds);
+        Duration waited = Duration.between(entry.enqueuedAt(), Instant.now());
+        boolean botAvailable = waited.compareTo(properties.botTimeout()) >= 0;
+        return QueueStatusResponse.waiting(waited.toSeconds(), botAvailable);
     }
 }

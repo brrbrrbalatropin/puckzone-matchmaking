@@ -9,6 +9,8 @@ import com.puckzone.matchmaking.model.QueueEntry;
 public record QueueStatusResponse(
         String status,
         Long secondsWaiting,
+        /** true cuando ya pasó el botTimeout: el cliente puede ofrecer jugar vs bot. */
+        Boolean botAvailable,
         MatchView match
 ) {
 
@@ -21,12 +23,13 @@ public record QueueStatusResponse(
     ) {
     }
 
-    public static QueueStatusResponse waiting(long secondsWaiting) {
-        return new QueueStatusResponse("WAITING", secondsWaiting, null);
+    public static QueueStatusResponse waiting(long secondsWaiting, boolean botAvailable) {
+        return new QueueStatusResponse("WAITING", secondsWaiting,
+                botAvailable ? true : null, null);
     }
 
     public static QueueStatusResponse notInQueue() {
-        return new QueueStatusResponse("NOT_IN_QUEUE", null, null);
+        return new QueueStatusResponse("NOT_IN_QUEUE", null, null, null);
     }
 
     /** Arma la vista de la sala desde la perspectiva del jugador que consulta. */
@@ -38,6 +41,6 @@ public record QueueStatusResponse(
                 ? new MatchView(match.id(), OpponentType.BOT.name(), "BOT", null)
                 : new MatchView(match.id(), OpponentType.HUMAN.name(),
                         opponent.username(), opponent.university());
-        return new QueueStatusResponse("MATCHED", null, view);
+        return new QueueStatusResponse("MATCHED", null, null, view);
     }
 }
