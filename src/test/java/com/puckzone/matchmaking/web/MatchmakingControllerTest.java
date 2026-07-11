@@ -30,7 +30,8 @@ class MatchmakingControllerTest {
 
     /** Bot a los 10s, igual que producción. */
     private final MatchmakingProperties props =
-            new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60));
+            new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60),
+                    Duration.ofMinutes(10));
 
     private MatchmakingQueue queue;
     private MatchmakingService service;

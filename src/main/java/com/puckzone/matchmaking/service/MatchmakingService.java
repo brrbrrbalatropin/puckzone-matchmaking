@@ -180,7 +180,7 @@ public class MatchmakingService {
 
     private void createMatch(QueueEntry player1, QueueEntry player2) {
         OpponentType type = player2 == null ? OpponentType.BOT : OpponentType.HUMAN;
-        Match match = new Match(UUID.randomUUID().toString(), player1, player2, type, Instant.now());
+        Match match = new Match(UUID.randomUUID().toString(), player1, player2, type, false, Instant.now());
         gameClient.notifyMatchCreated(match);
         matchesByUser.put(player1.userId(), match);
         if (player2 != null) {
@@ -189,5 +189,24 @@ public class MatchmakingService {
         } else {
             log.info("Sala {} creada: {} vs BOT (timeout de espera)", match.id(), player1.username());
         }
+    }
+
+    /**
+     * Sala amistosa de una sala privada: el amigo digitó el código del
+     * anfitrión. Se crea con la misma maquinaria de la cola (game la recibe
+     * ya con el flag friendly; ambos la recogen por el polling de siempre),
+     * pero sin pasar por el algoritmo de rating. Si alguno estaba esperando
+     * en la cola pública sale de ella: jugar con el amigo gana.
+     */
+    public Match createFriendlyMatch(QueueEntry host, QueueEntry guest) {
+        queue.remove(host.userId());
+        queue.remove(guest.userId());
+        Match match = new Match(UUID.randomUUID().toString(), host, guest,
+                OpponentType.HUMAN, true, Instant.now());
+        gameClient.notifyMatchCreated(match);
+        matchesByUser.put(host.userId(), match);
+        matchesByUser.put(guest.userId(), match);
+        log.info("Sala amistosa {} creada: {} vs {}", match.id(), host.username(), guest.username());
+        return match;
     }
 }

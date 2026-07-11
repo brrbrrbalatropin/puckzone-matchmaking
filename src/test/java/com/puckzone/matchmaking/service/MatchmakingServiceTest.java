@@ -34,7 +34,8 @@ class MatchmakingServiceTest {
 
     /** Ventana base ±50 que crece 25/s; bot a los 10s; retención 60s. */
     private final MatchmakingProperties props =
-            new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60));
+            new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60),
+                    Duration.ofMinutes(10));
 
     private MatchmakingQueue queue;
     private GameClient gameClient;
@@ -165,7 +166,7 @@ class MatchmakingServiceTest {
     @Test
     void lasSalasQueNadieRecogeExpiranTrasLaRetencion() throws InterruptedException {
         var shortRetention = new MatchmakingProperties(50, 25,
-                Duration.ofSeconds(10), Duration.ofMillis(50));
+                Duration.ofSeconds(10), Duration.ofMillis(50), Duration.ofMinutes(10));
         var expiringService = new MatchmakingService(queue,
                 id -> ratings.getOrDefault(id, 1200), shortRetention, gameClient);
         waiting("a", 1200, 11);

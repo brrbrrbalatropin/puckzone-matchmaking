@@ -10,7 +10,9 @@ public record MatchmakingProperties(
         @DefaultValue("50") int windowBase,
         @DefaultValue("25") int windowGrowthPerSecond,
         @DefaultValue("10s") Duration botTimeout,
-        @DefaultValue("60s") Duration matchRetention
+        @DefaultValue("60s") Duration matchRetention,
+        /** Vida de una sala privada esperando a que el amigo digite el código. */
+        @DefaultValue("10m") Duration privateRoomTtl
 ) {
 
     /**

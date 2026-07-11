@@ -38,7 +38,8 @@ public class GameClient {
                 match.id(),
                 PlayerPayload.from(match.player1()),
                 PlayerPayload.from(match.player2()),
-                match.opponentType().name());
+                match.opponentType().name(),
+                match.friendly());
         try {
             restClient.post()
                     .uri("/games")
@@ -53,8 +54,9 @@ public class GameClient {
         }
     }
 
-    /** Cuerpo del POST /games que game implementará. */
-    record CreateGameRequest(String matchId, PlayerPayload player1, PlayerPayload player2, String opponentType) {
+    /** Cuerpo del POST /games de game; friendly marca las salas privadas. */
+    record CreateGameRequest(String matchId, PlayerPayload player1, PlayerPayload player2,
+                             String opponentType, boolean friendly) {
     }
 
     record PlayerPayload(String userId, String username, String university) {
