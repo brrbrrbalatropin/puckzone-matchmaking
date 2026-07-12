@@ -5,10 +5,9 @@ package com.puckzone.matchmaking.rating;
  * emparejar rivales de rango similar.
  *
  * <p>Es una abstracción a propósito: el rating "de verdad" vive en
- * puckzone-ranking, que todavía no existe. Mientras tanto se usa
- * {@link StubRatingProvider}. Cuando exista ranking, bastará con añadir una
- * implementación que lo consulte por HTTP; la lógica de emparejamiento no
- * cambia porque depende solo de esta interfaz.
+ * puckzone-ranking y lo consulta {@link RankingRatingProvider} por HTTP
+ * (con cache y fallback al ELO inicial). La lógica de emparejamiento
+ * depende solo de esta interfaz — los tests le pasan un mapa.
  */
 public interface RatingProvider {
 

@@ -38,6 +38,12 @@ resource "azurerm_container_app" "matchmaking" {
         name  = "GAME_BASE_URL"
         value = "http://puckzone-game"
       }
+      # ranking es la fuente del ELO real: ventana de emparejamiento y
+      # nivel del bot (RankingRatingProvider, fallback 1200 si no responde).
+      env {
+        name  = "RANKING_BASE_URL"
+        value = "http://puckzone-ranking"
+      }
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = data.terraform_remote_state.base.outputs.application_insights_connection_string

@@ -30,3 +30,9 @@ puckzone:
     base-url: ${GAME_BASE_URL:http://localhost:8083}
     connect-timeout: 2s
     read-timeout: 3s
+
+  # puckzone-ranking: fuente del ELO real para la ventana de emparejamiento
+  # y para el nivel del bot que viaja a game en el POST /games.
+  ranking:
+    base-url: ${RANKING_BASE_URL:http://localhost:8084}
+    cache-ttl: 60s
