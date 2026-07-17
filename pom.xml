@@ -40,6 +40,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Metricas en formato Prometheus (/actuator/prometheus, las raspa el
+             Prometheus del environment y las grafica Grafana) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <!-- RestClient para llamadas HTTP salientes (matchmaking -> game) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
