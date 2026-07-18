@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: puckzone-matchmaking
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 management:
   endpoints:
     web:
@@ -22,11 +26,17 @@ puckzone:
     secret: ${PUCKZONE_JWT_SECRET:puckzone-dev-secret-change-me-please-32bytes-min!!}
 
   matchmaking:
+    # Dónde vive el estado (cola, matches, salas privadas, lock):
+    # memory SOLO para desarrollo local con réplica única; en Azure
+    # Terraform inyecta redis — obligatorio para correr 2+ réplicas.
+    store: ${MATCHMAKING_STORE:memory}
     window-base: 50
     window-growth-per-second: 25
     bot-timeout: 10s
     match-retention: 60s
     tick: 1s
+    # Barrido de entradas de cola abandonadas (la cola en Redis persiste).
+    queue-entry-ttl: 15m
 
   game:
     # Shards de game separados por comas, EN ORDEN (la posición i es el

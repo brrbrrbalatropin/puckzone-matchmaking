@@ -3,9 +3,12 @@ package com.puckzone.matchmaking.web;
 import com.puckzone.matchmaking.client.GameClient;
 import com.puckzone.matchmaking.config.MatchmakingProperties;
 import com.puckzone.matchmaking.model.QueueEntry;
+import com.puckzone.matchmaking.queue.InMemoryMatchmakingQueue;
 import com.puckzone.matchmaking.queue.MatchmakingQueue;
 import com.puckzone.matchmaking.security.AuthenticatedUser;
 import com.puckzone.matchmaking.service.MatchmakingService;
+import com.puckzone.matchmaking.store.InMemoryMatchStore;
+import com.puckzone.matchmaking.store.LocalPairingLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +35,7 @@ class MatchmakingControllerTest {
     /** Bot a los 10s, igual que producción. */
     private final MatchmakingProperties props =
             new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60),
-                    Duration.ofMinutes(10));
+                    Duration.ofMinutes(10), Duration.ofMinutes(15));
 
     private MatchmakingQueue queue;
     private MatchmakingService service;
@@ -40,11 +43,12 @@ class MatchmakingControllerTest {
 
     @BeforeEach
     void setUp() {
-        queue = new MatchmakingQueue();
+        queue = new InMemoryMatchmakingQueue();
         GameClient gameClient = mock(GameClient.class);
         // Sin al menos un shard declarado, la asignación divide por cero.
         when(gameClient.shardCount()).thenReturn(1);
-        service = new MatchmakingService(queue, id -> 1200, props, gameClient);
+        service = new MatchmakingService(queue, new InMemoryMatchStore(props),
+                new LocalPairingLock(), id -> 1200, props, gameClient);
         controller = new MatchmakingController(service, props);
     }
 

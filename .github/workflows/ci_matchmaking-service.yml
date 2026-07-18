@@ -44,8 +44,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: compile
 
-    # Matchmaking no usa BD (cola en memoria): el test de contexto no necesita
-    # servicios externos. El secreto JWT y la URL de game tienen defaults dev.
+    # Redis para los tests de integracion de los stores compartidos (cola,
+    # matches, salas privadas y lock); los tests del algoritmo usan el store
+    # en memoria y no lo necesitan. Sin BD: matchmaking sigue sin Postgres.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

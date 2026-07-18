@@ -5,7 +5,10 @@ import com.puckzone.matchmaking.config.MatchmakingProperties;
 import com.puckzone.matchmaking.model.Match;
 import com.puckzone.matchmaking.model.OpponentType;
 import com.puckzone.matchmaking.model.QueueEntry;
+import com.puckzone.matchmaking.queue.InMemoryMatchmakingQueue;
 import com.puckzone.matchmaking.queue.MatchmakingQueue;
+import com.puckzone.matchmaking.store.InMemoryMatchStore;
+import com.puckzone.matchmaking.store.LocalPairingLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +39,7 @@ class MatchmakingServiceTest {
     /** Ventana base ±50 que crece 25/s; bot a los 10s; retención 60s. */
     private final MatchmakingProperties props =
             new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60),
-                    Duration.ofMinutes(10));
+                    Duration.ofMinutes(10), Duration.ofMinutes(15));
 
     private MatchmakingQueue queue;
     private GameClient gameClient;
@@ -45,14 +48,14 @@ class MatchmakingServiceTest {
 
     @BeforeEach
     void setUp() {
-        queue = new MatchmakingQueue();
+        queue = new InMemoryMatchmakingQueue();
         gameClient = mock(GameClient.class);
         // El allocator reparte con floorMod(hash, shardCount): el mock debe
         // declarar al menos un shard o la asignación divide por cero.
         when(gameClient.shardCount()).thenReturn(1);
         ratings = new HashMap<>();
-        service = new MatchmakingService(queue,
-                id -> ratings.getOrDefault(id, 1200), props, gameClient);
+        service = new MatchmakingService(queue, new InMemoryMatchStore(props),
+                new LocalPairingLock(), id -> ratings.getOrDefault(id, 1200), props, gameClient);
     }
 
     /** Encola directo con la espera simulada: enqueuedAt corrido al pasado. */
@@ -182,15 +185,16 @@ class MatchmakingServiceTest {
     @Test
     void lasSalasQueNadieRecogeExpiranTrasLaRetencion() throws InterruptedException {
         var shortRetention = new MatchmakingProperties(50, 25,
-                Duration.ofSeconds(10), Duration.ofMillis(50), Duration.ofMinutes(10));
-        var expiringService = new MatchmakingService(queue,
-                id -> ratings.getOrDefault(id, 1200), shortRetention, gameClient);
+                Duration.ofSeconds(10), Duration.ofMillis(50), Duration.ofMinutes(10),
+                Duration.ofMinutes(15));
+        var expiringService = new MatchmakingService(queue, new InMemoryMatchStore(shortRetention),
+                new LocalPairingLock(), id -> ratings.getOrDefault(id, 1200),
+                shortRetention, gameClient);
         waiting("a", 1200, 11);
         expiringService.requestBotMatch("a");
         assertTrue(expiringService.matchFor("a").isPresent());
 
-        Thread.sleep(120); // supera la retención de 50ms
-        expiringService.tick();
+        Thread.sleep(120); // supera la retención de 50ms (ahora es el TTL del store)
 
         assertTrue(expiringService.matchFor("a").isEmpty(), "la sala no recogida no expiró");
     }

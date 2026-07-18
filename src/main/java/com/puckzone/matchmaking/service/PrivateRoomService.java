@@ -1,9 +1,9 @@
 package com.puckzone.matchmaking.service;
 
-import com.puckzone.matchmaking.config.MatchmakingProperties;
 import com.puckzone.matchmaking.model.Match;
 import com.puckzone.matchmaking.model.PrivateRoom;
 import com.puckzone.matchmaking.model.QueueEntry;
+import com.puckzone.matchmaking.store.PrivateRoomStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -11,15 +11,14 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Salas privadas por código: el anfitrión crea una, comparte el código de 6
  * caracteres y el amigo lo digita para arrancar una partida amistosa (sin
- * ELO) de inmediato. Todo en memoria, como la cola: matchmaking corre con
- * réplica única. La creación del match delega en
+ * ELO) de inmediato. Las salas viven en el {@link PrivateRoomStore}
+ * (memoria en local, Redis en producción: cualquier réplica atiende el
+ * código sin importar cuál creó la sala). La creación del match delega en
  * {@link MatchmakingService#createFriendlyMatch}, así la sala resultante se
  * entrega y expira por los mismos caminos que las de la cola.
  */
@@ -32,17 +31,14 @@ public class PrivateRoomService {
     private static final char[] CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789".toCharArray();
     private static final int CODE_LENGTH = 6;
 
-    private final Map<String, PrivateRoom> roomsByCode = new ConcurrentHashMap<>();
-    /** Código de la sala de cada anfitrión: máximo una por jugador. */
-    private final Map<String, String> codeByHost = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
 
     private final MatchmakingService matchmaking;
-    private final MatchmakingProperties properties;
+    private final PrivateRoomStore rooms;
 
-    public PrivateRoomService(MatchmakingService matchmaking, MatchmakingProperties properties) {
+    public PrivateRoomService(MatchmakingService matchmaking, PrivateRoomStore rooms) {
         this.matchmaking = matchmaking;
-        this.properties = properties;
+        this.rooms = rooms;
     }
 
     /**
@@ -54,31 +50,25 @@ public class PrivateRoomService {
         cancel(host.userId());
         String code = generateCode();
         PrivateRoom room = new PrivateRoom(code, host, Instant.now());
-        roomsByCode.put(code, room);
-        codeByHost.put(host.userId(), code);
+        rooms.save(room);
         log.info("Sala privada {} creada por {}", code, host.username());
         return room;
     }
 
     /** La sala del anfitrión si sigue esperando invitado (y no ha expirado). */
     public Optional<PrivateRoom> roomOf(String hostId) {
-        return Optional.ofNullable(codeByHost.get(hostId))
-                .map(roomsByCode::get)
-                .filter(room -> !isExpired(room, Instant.now()));
+        return rooms.codeOf(hostId).flatMap(rooms::byCode);
     }
 
     /** Cancela la sala del anfitrión. Idempotente. */
     public void cancel(String hostId) {
-        String code = codeByHost.remove(hostId);
-        if (code != null && roomsByCode.remove(code) != null) {
-            log.info("Sala privada {} cancelada por su anfitrión", code);
-        }
+        rooms.cancel(hostId);
     }
 
     /**
-     * Un amigo digitó el código: la sala se consume (el remove es atómico —
-     * si dos personas lo digitan a la vez solo una entra) y la partida
-     * amistosa arranca ya.
+     * Un amigo digitó el código: la sala se consume (el consumo del store es
+     * atómico — si dos personas lo digitan a la vez solo una entra) y la
+     * partida amistosa arranca ya.
      *
      * @return la sala creada en game
      * @throws java.util.NoSuchElementException código inexistente, vencido o ya usado
@@ -86,36 +76,23 @@ public class PrivateRoomService {
      */
     public Match join(String code, QueueEntry guest) {
         String normalized = code == null ? "" : code.strip().toUpperCase();
-        PrivateRoom room = roomsByCode.get(normalized);
-        if (room != null && room.host().userId().equals(guest.userId())) {
+        // Chequeo amable ANTES de consumir: el anfitrión que digita su propio
+        // código no debe quemar la sala.
+        if (rooms.byCode(normalized)
+                .filter(room -> room.host().userId().equals(guest.userId()))
+                .isPresent()) {
             throw new IllegalStateException("No puedes unirte a tu propia sala");
         }
-        room = roomsByCode.remove(normalized);
-        if (room != null) {
-            codeByHost.remove(room.host().userId(), normalized);
-        }
-        if (room == null || isExpired(room, Instant.now())) {
-            throw new java.util.NoSuchElementException("Código inválido, vencido o ya usado");
-        }
+        PrivateRoom room = rooms.consume(normalized)
+                .orElseThrow(() -> new java.util.NoSuchElementException(
+                        "Código inválido, vencido o ya usado"));
         return matchmaking.createFriendlyMatch(room.host(), guest);
     }
 
-    /** Barrido de salas que nadie reclamó dentro del TTL. */
+    /** Barrido de salas vencidas (no-op en Redis: su TTL las expira solo). */
     @Scheduled(fixedRateString = "${puckzone.matchmaking.private-room-sweep:30s}")
     public void sweepExpired() {
-        Instant now = Instant.now();
-        roomsByCode.values().removeIf(room -> {
-            if (!isExpired(room, now)) {
-                return false;
-            }
-            codeByHost.remove(room.host().userId(), room.code());
-            log.info("Sala privada {} expiró sin invitado", room.code());
-            return true;
-        });
-    }
-
-    private boolean isExpired(PrivateRoom room, Instant now) {
-        return room.createdAt().plus(properties.privateRoomTtl()).isBefore(now);
+        rooms.sweepExpired();
     }
 
     private String generateCode() {
@@ -126,7 +103,7 @@ public class PrivateRoomService {
                 sb.append(CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)]);
             }
             String code = sb.toString();
-            if (!roomsByCode.containsKey(code)) {
+            if (rooms.byCode(code).isEmpty()) {
                 return code;
             }
         }

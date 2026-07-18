@@ -12,7 +12,12 @@ public record MatchmakingProperties(
         @DefaultValue("10s") Duration botTimeout,
         @DefaultValue("60s") Duration matchRetention,
         /** Vida de una sala privada esperando a que el amigo digite el código. */
-        @DefaultValue("10m") Duration privateRoomTtl
+        @DefaultValue("10m") Duration privateRoomTtl,
+        /**
+         * Entradas de cola más viejas que esto se barren (cliente muerto sin
+         * cancelar): la cola en Redis sobrevive reinicios y no se limpia sola.
+         */
+        @DefaultValue("15m") Duration queueEntryTtl
 ) {
 
     /**

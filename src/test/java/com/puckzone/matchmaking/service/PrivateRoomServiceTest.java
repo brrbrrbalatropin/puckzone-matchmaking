@@ -5,7 +5,11 @@ import com.puckzone.matchmaking.config.MatchmakingProperties;
 import com.puckzone.matchmaking.model.Match;
 import com.puckzone.matchmaking.model.OpponentType;
 import com.puckzone.matchmaking.model.QueueEntry;
+import com.puckzone.matchmaking.queue.InMemoryMatchmakingQueue;
 import com.puckzone.matchmaking.queue.MatchmakingQueue;
+import com.puckzone.matchmaking.store.InMemoryMatchStore;
+import com.puckzone.matchmaking.store.InMemoryPrivateRoomStore;
+import com.puckzone.matchmaking.store.LocalPairingLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +35,7 @@ class PrivateRoomServiceTest {
 
     private final MatchmakingProperties props =
             new MatchmakingProperties(50, 25, Duration.ofSeconds(10), Duration.ofSeconds(60),
-                    Duration.ofMinutes(10));
+                    Duration.ofMinutes(10), Duration.ofMinutes(15));
 
     private MatchmakingQueue queue;
     private GameClient gameClient;
@@ -47,12 +51,13 @@ class PrivateRoomServiceTest {
 
     @BeforeEach
     void setUp() {
-        queue = new MatchmakingQueue();
+        queue = new InMemoryMatchmakingQueue();
         gameClient = mock(GameClient.class);
         // Sin al menos un shard declarado, la asignación divide por cero.
         when(gameClient.shardCount()).thenReturn(1);
-        matchmaking = new MatchmakingService(queue, id -> 1200, props, gameClient);
-        rooms = new PrivateRoomService(matchmaking, props);
+        matchmaking = new MatchmakingService(queue, new InMemoryMatchStore(props),
+                new LocalPairingLock(), id -> 1200, props, gameClient);
+        rooms = new PrivateRoomService(matchmaking, new InMemoryPrivateRoomStore(props));
     }
 
     @Test
@@ -109,8 +114,9 @@ class PrivateRoomServiceTest {
     @Test
     void laSalaExpiradaNoSirveYElBarridoLaSaca() {
         var shortTtl = new MatchmakingProperties(50, 25, Duration.ofSeconds(10),
-                Duration.ofSeconds(60), Duration.ofMillis(-1)); // ya nació vencida
-        var expiring = new PrivateRoomService(matchmaking, shortTtl);
+                Duration.ofSeconds(60), Duration.ofMillis(-1), // ya nació vencida
+                Duration.ofMinutes(15));
+        var expiring = new PrivateRoomService(matchmaking, new InMemoryPrivateRoomStore(shortTtl));
 
         String code = expiring.create(daniel).code();
 

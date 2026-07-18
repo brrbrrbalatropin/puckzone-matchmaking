@@ -7,6 +7,8 @@ import com.puckzone.matchmaking.model.OpponentType;
 import com.puckzone.matchmaking.model.QueueEntry;
 import com.puckzone.matchmaking.queue.MatchmakingQueue;
 import com.puckzone.matchmaking.rating.RatingProvider;
+import com.puckzone.matchmaking.store.MatchStore;
+import com.puckzone.matchmaking.store.PairingLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,18 +32,21 @@ public class MatchmakingService {
     private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
 
     private final MatchmakingQueue queue;
+    private final MatchStore matches;
+    private final PairingLock pairingLock;
     private final RatingProvider ratingProvider;
     private final MatchmakingProperties properties;
     private final GameClient gameClient;
 
-    /** Salas ya creadas, pendientes de que el jugador las recoja por polling. */
-    private final Map<String, Match> matchesByUser = new ConcurrentHashMap<>();
-
     public MatchmakingService(MatchmakingQueue queue,
+                              MatchStore matches,
+                              PairingLock pairingLock,
                               RatingProvider ratingProvider,
                               MatchmakingProperties properties,
                               GameClient gameClient) {
         this.queue = queue;
+        this.matches = matches;
+        this.pairingLock = pairingLock;
         this.ratingProvider = ratingProvider;
         this.properties = properties;
         this.gameClient = gameClient;
@@ -55,7 +60,7 @@ public class MatchmakingService {
      * @throws IllegalStateException si ya está en la cola
      */
     public QueueEntry enqueue(String userId, String username, String university) {
-        if (matchesByUser.remove(userId) != null) {
+        if (matches.discard(userId)) {
             log.info("Jugador {} se re-encoló; se descarta su sala anterior", userId);
         }
         QueueEntry entry = new QueueEntry(userId, username, university, Instant.now());
@@ -87,20 +92,25 @@ public class MatchmakingService {
      * consulta el polling del cliente cada 1-2 segundos.
      */
     public Optional<Match> matchFor(String userId) {
-        return Optional.ofNullable(matchesByUser.get(userId));
+        return matches.find(userId);
     }
 
     /**
-     * Un pase del algoritmo de emparejamiento. Corre cada segundo.
-     * Desde 2026-07-08 el bot NO se asigna automáticamente: al cumplirse el
-     * botTimeout el status ofrece la opción (botAvailable) y el jugador
-     * decide con POST /queue/bot, o sigue esperando rival humano.
+     * Un pase del algoritmo de emparejamiento. Corre cada segundo en TODAS
+     * las réplicas, pero solo la que gana el {@link PairingLock} empareja
+     * (con Redis el lock es distribuido; si esa réplica muere, otra retoma
+     * al siguiente tick). Desde 2026-07-08 el bot NO se asigna
+     * automáticamente: al cumplirse el botTimeout el status ofrece la
+     * opción (botAvailable) y el jugador decide con POST /queue/bot, o
+     * sigue esperando rival humano.
      */
     @Scheduled(fixedRateString = "${puckzone.matchmaking.tick:1s}")
     public void tick() {
-        Instant now = Instant.now();
-        pairHumans(now);
-        evictOldMatches(now);
+        pairingLock.runExclusive(() -> {
+            Instant now = Instant.now();
+            evictStaleQueueEntries(now);
+            pairHumans(now);
+        });
     }
 
     /**
@@ -111,15 +121,14 @@ public class MatchmakingService {
      * @throws IllegalStateException si no está en cola ni tiene sala
      */
     public Match requestBotMatch(String userId) {
-        Match existing = matchesByUser.get(userId);
-        if (existing != null) {
-            log.info("Jugador {} pidió bot pero ya tenía sala {}", userId, existing.id());
-            return existing;
+        Optional<Match> existing = matches.find(userId);
+        if (existing.isPresent()) {
+            log.info("Jugador {} pidió bot pero ya tenía sala {}", userId, existing.get().id());
+            return existing.get();
         }
         QueueEntry entry = queue.remove(userId)
                 .orElseThrow(() -> new IllegalStateException("El jugador no está en la cola"));
-        createMatch(entry, null);
-        return matchesByUser.get(userId);
+        return createMatch(entry, null);
     }
 
     /** Fase 1: empareja humanos compatibles, los de rating más cercano primero. */
@@ -172,10 +181,19 @@ public class MatchmakingService {
         }
     }
 
-    /** Fase 2: descarta salas que nadie recogió tras el periodo de retención. */
-    private void evictOldMatches(Instant now) {
-        Instant cutoff = now.minus(properties.matchRetention());
-        matchesByUser.values().removeIf(m -> m.createdAt().isBefore(cutoff));
+    /**
+     * Entradas de cola abandonadas (el cliente murió sin cancelar): antes
+     * un reinicio limpiaba la memoria, pero la cola en Redis persiste y los
+     * fantasmas se quedarían para siempre.
+     */
+    private void evictStaleQueueEntries(Instant now) {
+        Instant cutoff = now.minus(properties.queueEntryTtl());
+        for (QueueEntry entry : queue.snapshot()) {
+            if (entry.enqueuedAt().isBefore(cutoff) && queue.remove(entry.userId()).isPresent()) {
+                log.info("Jugador {} barrido de la cola: llevaba más de {} esperando",
+                        entry.userId(), properties.queueEntryTtl());
+            }
+        }
     }
 
     /**
@@ -188,18 +206,26 @@ public class MatchmakingService {
         return Math.floorMod(matchId.hashCode(), gameClient.shardCount());
     }
 
-    private void createMatch(QueueEntry player1, QueueEntry player2) {
+    private Match createMatch(QueueEntry player1, QueueEntry player2) {
         OpponentType type = player2 == null ? OpponentType.BOT : OpponentType.HUMAN;
         String matchId = UUID.randomUUID().toString();
         Match match = new Match(matchId, shardFor(matchId), player1, player2, type, false, Instant.now());
-        gameClient.notifyMatchCreated(match);
-        matchesByUser.put(player1.userId(), match);
+        // La sala se publica ANTES de notificar a game: entre el reclamo de
+        // la cola y esta publicación el status diría NOT_IN_QUEUE, y el POST
+        // a game puede tardar segundos si el shard está frío (la carrera que
+        // el frontend toleraba con reintentos). game es idempotente y la
+        // sala se entrega aunque la notificación falle, como siempre.
+        matches.put(player1.userId(), match);
         if (player2 != null) {
-            matchesByUser.put(player2.userId(), match);
+            matches.put(player2.userId(), match);
+        }
+        gameClient.notifyMatchCreated(match);
+        if (player2 != null) {
             log.info("Sala {} creada: {} vs {}", match.id(), player1.username(), player2.username());
         } else {
             log.info("Sala {} creada: {} vs BOT (timeout de espera)", match.id(), player1.username());
         }
+        return match;
     }
 
     /**
@@ -215,9 +241,10 @@ public class MatchmakingService {
         String matchId = UUID.randomUUID().toString();
         Match match = new Match(matchId, shardFor(matchId), host, guest,
                 OpponentType.HUMAN, true, Instant.now());
+        // Mismo orden que createMatch: publicar primero, notificar después.
+        matches.put(host.userId(), match);
+        matches.put(guest.userId(), match);
         gameClient.notifyMatchCreated(match);
-        matchesByUser.put(host.userId(), match);
-        matchesByUser.put(guest.userId(), match);
         log.info("Sala amistosa {} creada: {} vs {}", match.id(), host.username(), guest.username());
         return match;
     }

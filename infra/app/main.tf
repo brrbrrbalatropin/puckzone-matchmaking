@@ -12,11 +12,12 @@ resource "azurerm_container_app" "matchmaking" {
   }
 
   template {
-    # OJO: la cola de matchmaking vive EN MEMORIA (sin BD). Con mas de 1 replica
-    # habria colas independientes y jugadores que nunca se emparejan.
-    # NO subir hasta externalizar la cola (p. ej. Redis).
-    min_replicas = 1
-    max_replicas = 1
+    # 2 replicas con el estado (cola, matches, salas privadas) en el Redis
+    # compartido del environment y lock distribuido para el pase de
+    # emparejamiento: si una replica muere, la otra sigue emparejando.
+    # Requiere MATCHMAKING_STORE=redis (abajo); en memoria seria split-brain.
+    min_replicas = 2
+    max_replicas = 2
 
     container {
       # 0.5/1Gi como el resto: con menos CPU el arranque de Spring supera los
@@ -51,6 +52,20 @@ resource "azurerm_container_app" "matchmaking" {
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = data.terraform_remote_state.base.outputs.application_insights_connection_string
+      }
+      # Estado compartido entre replicas en el Redis del environment (al
+      # final de la lista: el diff de env de Container Apps es posicional).
+      env {
+        name  = "MATCHMAKING_STORE"
+        value = "redis"
+      }
+      env {
+        name  = "SPRING_DATA_REDIS_HOST"
+        value = data.terraform_remote_state.base.outputs.redis_host
+      }
+      env {
+        name  = "SPRING_DATA_REDIS_PORT"
+        value = "6379"
       }
 
       liveness_probe {
