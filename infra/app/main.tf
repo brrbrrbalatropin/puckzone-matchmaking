@@ -35,12 +35,12 @@ resource "azurerm_container_app" "matchmaking" {
       # el cert del dominio .internal. no es confiable para Java (por eso los
       # servicios internos tienen allow_insecure_connections = true).
       # Shards de game EN ORDEN (posicion i = shard i), misma lista que el
-      # GAME_SHARD_URLS del gateway. UNA sola URL hasta que el frontend sepa
-      # conectarse a /ws-{shard}: el flip a 2 shards agrega
-      # ",http://puckzone-game-1" aqui (en el gateway ya esta).
+      # GAME_SHARD_URLS del gateway. Con la lista completa las partidas se
+      # reparten entre shards por hash del matchId (flip 2026-07-18, con
+      # gateway y frontend ya shard-aware).
       env {
         name  = "GAME_SHARD_URLS"
-        value = "http://puckzone-game"
+        value = "http://puckzone-game,http://puckzone-game-1"
       }
       # ranking es la fuente del ELO real: ventana de emparejamiento y
       # nivel del bot (RankingRatingProvider, fallback 1200 si no responde).
