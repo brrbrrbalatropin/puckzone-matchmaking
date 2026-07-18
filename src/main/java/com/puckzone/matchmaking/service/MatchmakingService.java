@@ -178,9 +178,20 @@ public class MatchmakingService {
         matchesByUser.values().removeIf(m -> m.createdAt().isBefore(cutoff));
     }
 
+    /**
+     * Shard de game dueño de una partida nueva: hash del matchId módulo el
+     * número de shards. Determinístico y sin estado — no necesita contador
+     * compartido, así que seguirá funcionando igual cuando matchmaking
+     * tenga varias réplicas.
+     */
+    private int shardFor(String matchId) {
+        return Math.floorMod(matchId.hashCode(), gameClient.shardCount());
+    }
+
     private void createMatch(QueueEntry player1, QueueEntry player2) {
         OpponentType type = player2 == null ? OpponentType.BOT : OpponentType.HUMAN;
-        Match match = new Match(UUID.randomUUID().toString(), player1, player2, type, false, Instant.now());
+        String matchId = UUID.randomUUID().toString();
+        Match match = new Match(matchId, shardFor(matchId), player1, player2, type, false, Instant.now());
         gameClient.notifyMatchCreated(match);
         matchesByUser.put(player1.userId(), match);
         if (player2 != null) {
@@ -201,7 +212,8 @@ public class MatchmakingService {
     public Match createFriendlyMatch(QueueEntry host, QueueEntry guest) {
         queue.remove(host.userId());
         queue.remove(guest.userId());
-        Match match = new Match(UUID.randomUUID().toString(), host, guest,
+        String matchId = UUID.randomUUID().toString();
+        Match match = new Match(matchId, shardFor(matchId), host, guest,
                 OpponentType.HUMAN, true, Instant.now());
         gameClient.notifyMatchCreated(match);
         matchesByUser.put(host.userId(), match);

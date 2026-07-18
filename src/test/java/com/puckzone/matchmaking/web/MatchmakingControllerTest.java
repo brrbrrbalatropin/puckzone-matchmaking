@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * El contrato del polling GET /queue/status que consume el frontend:
@@ -40,7 +41,10 @@ class MatchmakingControllerTest {
     @BeforeEach
     void setUp() {
         queue = new MatchmakingQueue();
-        service = new MatchmakingService(queue, id -> 1200, props, mock(GameClient.class));
+        GameClient gameClient = mock(GameClient.class);
+        // Sin al menos un shard declarado, la asignación divide por cero.
+        when(gameClient.shardCount()).thenReturn(1);
+        service = new MatchmakingService(queue, id -> 1200, props, gameClient);
         controller = new MatchmakingController(service, props);
     }
 

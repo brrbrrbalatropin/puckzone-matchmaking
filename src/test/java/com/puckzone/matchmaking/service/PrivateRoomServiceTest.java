@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Salas privadas por código: crear/renovar, unirse (una sola vez, nunca a la
@@ -48,6 +49,8 @@ class PrivateRoomServiceTest {
     void setUp() {
         queue = new MatchmakingQueue();
         gameClient = mock(GameClient.class);
+        // Sin al menos un shard declarado, la asignación divide por cero.
+        when(gameClient.shardCount()).thenReturn(1);
         matchmaking = new MatchmakingService(queue, id -> 1200, props, gameClient);
         rooms = new PrivateRoomService(matchmaking, props);
     }

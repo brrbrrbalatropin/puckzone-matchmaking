@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * El algoritmo de emparejamiento sin red ni reloj de Spring: cola real,
@@ -46,6 +47,9 @@ class MatchmakingServiceTest {
     void setUp() {
         queue = new MatchmakingQueue();
         gameClient = mock(GameClient.class);
+        // El allocator reparte con floorMod(hash, shardCount): el mock debe
+        // declarar al menos un shard o la asignación divide por cero.
+        when(gameClient.shardCount()).thenReturn(1);
         ratings = new HashMap<>();
         service = new MatchmakingService(queue,
                 id -> ratings.getOrDefault(id, 1200), props, gameClient);
@@ -56,6 +60,18 @@ class MatchmakingServiceTest {
         ratings.put(userId, rating);
         queue.add(new QueueEntry(userId, "user-" + userId, "eci",
                 Instant.now().minusSeconds(secondsWaiting)));
+    }
+
+    @Test
+    void laSalaNuevaSaleAsignadaAUnShardDeterministicoPorSuId() {
+        when(gameClient.shardCount()).thenReturn(2);
+        waiting("solo", 1200, 15);
+
+        Match match = service.requestBotMatch("solo");
+
+        assertEquals(Math.floorMod(match.id().hashCode(), 2), match.shard(),
+                "el shard debe salir del hash del matchId (sin estado compartido)");
+        verify(gameClient).notifyMatchCreated(match);
     }
 
     @Test

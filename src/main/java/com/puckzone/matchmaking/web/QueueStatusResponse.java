@@ -17,6 +17,8 @@ public record QueueStatusResponse(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record MatchView(
             String matchId,
+            /** Shard de game dueño de la sala: el cliente conecta a /ws-{shard}. */
+            int shard,
             String opponentType,
             String opponentUsername,
             String opponentUniversity
@@ -38,8 +40,8 @@ public record QueueStatusResponse(
                 ? match.player2()
                 : match.player1();
         MatchView view = match.opponentType() == OpponentType.BOT
-                ? new MatchView(match.id(), OpponentType.BOT.name(), "BOT", null)
-                : new MatchView(match.id(), OpponentType.HUMAN.name(),
+                ? new MatchView(match.id(), match.shard(), OpponentType.BOT.name(), "BOT", null)
+                : new MatchView(match.id(), match.shard(), OpponentType.HUMAN.name(),
                         opponent.username(), opponent.university());
         return new QueueStatusResponse("MATCHED", null, null, view);
     }

@@ -7,6 +7,8 @@ import com.puckzone.matchmaking.model.QueueEntry;
 import com.puckzone.matchmaking.rating.RatingProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.stereotype.Component;
@@ -18,22 +20,28 @@ public class GameClient {
 
     private static final Logger log = LoggerFactory.getLogger(GameClient.class);
 
-    private final RestClient restClient;
+    /** Un cliente por shard de game, en el orden de puckzone.game.shard-urls. */
+    private final List<RestClient> shardClients;
     private final RatingProvider ratingProvider;
 
     public GameClient(RestClient.Builder builder, GameProperties properties,
                       RatingProvider ratingProvider) {
         var settings = HttpClientSettings.defaults()
                 .withTimeouts(properties.connectTimeout(), properties.readTimeout());
-        this.restClient = builder
-                .baseUrl(properties.baseUrl())
-                .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
-                .build();
+        var requestFactory = ClientHttpRequestFactoryBuilder.detect().build(settings);
+        this.shardClients = properties.shardUrls().stream()
+                .map(url -> builder.baseUrl(url).requestFactory(requestFactory).build())
+                .toList();
         this.ratingProvider = ratingProvider;
     }
 
+    /** Cuántos shards de game existen; el allocator reparte entre ellos. */
+    public int shardCount() {
+        return shardClients.size();
+    }
+
     /**
-     * Notifica a game que cree la partida para la sala dada.
+     * Notifica al shard dueño ({@code match.shard()}) que cree la partida.
      *
      * @return {@code true} si game confirmó; {@code false} si no fue posible
      *         contactarlo (la sala se entrega igual al jugador)
@@ -52,15 +60,16 @@ public class GameClient {
                 match.friendly(),
                 player1Rating);
         try {
-            restClient.post()
+            shardClients.get(match.shard()).post()
                     .uri("/games")
                     .body(request)
                     .retrieve()
                     .toBodilessEntity();
-            log.info("game confirmó la partida {}", match.id());
+            log.info("El shard {} confirmó la partida {}", match.shard(), match.id());
             return true;
         } catch (RestClientException e) {
-            log.warn("No se pudo notificar a game la partida {}: {}", match.id(), e.getMessage());
+            log.warn("No se pudo notificar al shard {} la partida {}: {}",
+                    match.shard(), match.id(), e.getMessage());
             return false;
         }
     }

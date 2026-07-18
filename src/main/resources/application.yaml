@@ -29,7 +29,9 @@ puckzone:
     tick: 1s
 
   game:
-    base-url: ${GAME_BASE_URL:http://localhost:8083}
+    # Shards de game separados por comas, EN ORDEN (la posición i es el
+    # shard i). Misma lista que el GAME_SHARD_URLS del gateway.
+    shard-urls: ${GAME_SHARD_URLS:http://localhost:8083}
     connect-timeout: 2s
     read-timeout: 3s
 
