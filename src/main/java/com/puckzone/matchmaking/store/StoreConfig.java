@@ -23,8 +23,12 @@ import tools.jackson.databind.json.JsonMapper;
  *       cola distinta.</li>
  * </ul>
  */
-@Configuration
-public class StoreConfig {
+public final class StoreConfig {
+
+    // Solo agrupa las dos configuraciones anidadas (el scan las registra
+    // directamente); no se instancia.
+    private StoreConfig() {
+    }
 
     @Configuration
     @ConditionalOnProperty(name = "puckzone.matchmaking.store", havingValue = "memory")

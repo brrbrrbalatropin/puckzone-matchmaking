@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -110,8 +111,10 @@ class RedisStoresIntegrationTest {
         assertEquals(match.id(), store.find("ana").orElseThrow().id());
         assertEquals(1, store.find("ana").orElseThrow().shard(), "el shard sobrevive el JSON");
 
-        Thread.sleep(600); // > match-retention de 400ms
-        assertTrue(store.find("ana").isEmpty(), "el TTL debe expirar la sala");
+        // > match-retention de 400ms
+        await().atMost(Duration.ofSeconds(2))
+                .untilAsserted(() -> assertTrue(store.find("ana").isEmpty(),
+                        "el TTL debe expirar la sala"));
     }
 
     @Test

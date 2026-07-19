@@ -31,7 +31,7 @@ public class RankingRatingProvider implements RatingProvider {
 
     private static final Logger log = LoggerFactory.getLogger(RankingRatingProvider.class);
 
-    /** ELO con el que ranking crea a todo jugador; el fallback universal. */
+    /** ELO con el que ranking crea a cada jugador nuevo; el fallback universal. */
     static final int INITIAL_ELO = 1200;
 
     private final RestClient restClient;

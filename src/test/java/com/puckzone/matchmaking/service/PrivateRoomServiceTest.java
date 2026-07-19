@@ -80,8 +80,9 @@ class PrivateRoomServiceTest {
 
         rooms.join(code.toLowerCase(), amigo);
 
+        var tercero = entry("id-otro", "otro");
         assertThrows(NoSuchElementException.class,
-                () -> rooms.join(code, entry("id-otro", "otro")),
+                () -> rooms.join(code, tercero),
                 "el código consumido no puede servirle a un tercero");
     }
 

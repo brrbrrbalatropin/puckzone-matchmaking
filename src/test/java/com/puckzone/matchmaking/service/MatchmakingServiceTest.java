@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -194,8 +195,9 @@ class MatchmakingServiceTest {
         expiringService.requestBotMatch("a");
         assertTrue(expiringService.matchFor("a").isPresent());
 
-        Thread.sleep(120); // supera la retención de 50ms (ahora es el TTL del store)
-
-        assertTrue(expiringService.matchFor("a").isEmpty(), "la sala no recogida no expiró");
+        // Supera la retención de 50ms (ahora es el TTL del store).
+        await().atMost(Duration.ofSeconds(2))
+                .untilAsserted(() -> assertTrue(expiringService.matchFor("a").isEmpty(),
+                        "la sala no recogida no expiró"));
     }
 }

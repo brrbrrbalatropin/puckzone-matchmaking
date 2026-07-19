@@ -25,6 +25,7 @@ public record MatchmakingProperties(
      * {@code base + crecimiento * segundosEsperando}.
      */
     public long windowFor(Duration waited) {
-        return windowBase + (long) windowGrowthPerSecond * waited.toSeconds();
+        // int * long promociona a long solo: no hay riesgo de overflow de int.
+        return windowBase + windowGrowthPerSecond * waited.toSeconds();
     }
 }

@@ -18,7 +18,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 /**
  * El proveedor de rating real: lee el elo de ranking, cachea (una consulta
- * sirve para todo el polling de la cola) y cae al ELO inicial 1200 cuando
+ * sirve durante el polling completo de la cola) y cae al ELO inicial 1200 cuando
  * el jugador no existe (404) o ranking no responde — la cola nunca se
  * frena por culpa de ranking.
  */

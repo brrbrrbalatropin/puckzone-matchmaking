@@ -131,6 +131,10 @@ public class MatchmakingService {
         return createMatch(entry, null);
     }
 
+    /** Pareja candidata: dos entradas compatibles con su cercanía y antigüedad. */
+    private record Candidate(QueueEntry a, QueueEntry b, int ratingDiff, Instant oldest) {
+    }
+
     /** Fase 1: empareja humanos compatibles, los de rating más cercano primero. */
     private void pairHumans(Instant now) {
         List<QueueEntry> waiting = queue.snapshot();
@@ -141,10 +145,20 @@ public class MatchmakingService {
         Map<String, Integer> ratings = new ConcurrentHashMap<>();
         waiting.forEach(e -> ratings.put(e.userId(), ratingProvider.ratingFor(e.userId())));
 
-        // Todos los pares compatibles, ordenados por cercanía de rating y,
-        // a igualdad, por antigüedad del jugador que más lleva esperando.
-        record Candidate(QueueEntry a, QueueEntry b, int ratingDiff, Instant oldest) {
+        Set<String> matched = new HashSet<>();
+        for (Candidate c : compatiblePairs(waiting, ratings, now)) {
+            if (!matched.contains(c.a().userId()) && !matched.contains(c.b().userId())) {
+                claimAndMatch(c, matched);
+            }
         }
+    }
+
+    /**
+     * Los pares compatibles, ordenados por cercanía de rating y, a
+     * igualdad, por antigüedad del jugador que más lleva esperando.
+     */
+    private List<Candidate> compatiblePairs(List<QueueEntry> waiting,
+                                            Map<String, Integer> ratings, Instant now) {
         List<Candidate> candidates = new ArrayList<>();
         for (int i = 0; i < waiting.size(); i++) {
             for (int j = i + 1; j < waiting.size(); j++) {
@@ -162,23 +176,24 @@ public class MatchmakingService {
         }
         candidates.sort(Comparator.comparingInt(Candidate::ratingDiff)
                 .thenComparing(Candidate::oldest));
+        return candidates;
+    }
 
-        Set<String> matched = new HashSet<>();
-        for (Candidate c : candidates) {
-            if (matched.contains(c.a().userId()) || matched.contains(c.b().userId())) {
-                continue;
-            }
-            Optional<QueueEntry> a = queue.remove(c.a().userId());
-            Optional<QueueEntry> b = queue.remove(c.b().userId());
-            if (a.isEmpty() || b.isEmpty()) {
-                a.ifPresent(queue::add);
-                b.ifPresent(queue::add);
-                continue;
-            }
-            matched.add(c.a().userId());
-            matched.add(c.b().userId());
-            createMatch(a.get(), b.get());
+    /**
+     * Reclama a ambos jugadores de la cola y crea la sala; si otro proceso
+     * ya sacó a alguno, devuelve al que sí se alcanzó a reclamar.
+     */
+    private void claimAndMatch(Candidate c, Set<String> matched) {
+        Optional<QueueEntry> a = queue.remove(c.a().userId());
+        Optional<QueueEntry> b = queue.remove(c.b().userId());
+        if (a.isEmpty() || b.isEmpty()) {
+            a.ifPresent(queue::add);
+            b.ifPresent(queue::add);
+            return;
         }
+        matched.add(c.a().userId());
+        matched.add(c.b().userId());
+        createMatch(a.get(), b.get());
     }
 
     /**
